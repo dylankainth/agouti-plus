@@ -1,6 +1,5 @@
 /*******************************************************************************
  * Copyright (c) 2015 Thomas Telkamp and Matthijs Kooijman
- * Copyright (c) 2018 Terry Moore, MCCI
  *
  * Permission is hereby granted, free of charge, to anyone
  * obtaining a copy of this document and accompanying files,
@@ -26,8 +25,7 @@
  * Multiple devices can use the same AppEUI, but each device has its own
  * DevEUI and AppKey.
  *
- * Do not forget to define the radio type correctly in
- * arduino-lmic/project_config/lmic_project_config.h or from your BOARDS.txt.
+ * Do not forget to define the radio type correctly in config.h.
  *
  *******************************************************************************/
 
@@ -35,36 +33,24 @@
 #include <hal/hal.h>
 #include <SPI.h>
 
-//
-// For normal use, we require that you edit the sketch to replace FILLMEIN
-// with values assigned by the TTN console. However, for regression tests,
-// we want to be able to compile these scripts. The regression tests define
-// COMPILE_REGRESSION_TEST, and in that case we define FILLMEIN to a non-
-// working but innocuous value.
-//
-#ifdef COMPILE_REGRESSION_TEST
-# define FILLMEIN 0
-#else
-# warning "You must replace the values marked FILLMEIN with real values from the TTN control panel!"
-# define FILLMEIN (#dont edit this, edit the lines that use FILLMEIN)
-#endif
-
 // This EUI must be in little-endian format, so least-significant-byte
 // first. When copying an EUI from ttnctl output, this means to reverse
 // the bytes. For TTN issued EUIs the last bytes should be 0xD5, 0xB3,
 // 0x70.
+
 static const u1_t PROGMEM APPEUI[8]={ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 void os_getArtEui (u1_t* buf) { memcpy_P(buf, APPEUI, 8);}
-
-// This should also be in little endian format, see above.
-static const u1_t PROGMEM DEVEUI[8]={ 0xB8, 0x9D, 0x05, 0xD0, 0x7E, 0xD5, 0xB3, 0x70 };
+// This should also be in little endian format, see above.  55A105D07ED5B370
+static const u1_t PROGMEM DEVEUI[8]={ 0x55, 0xA1, 0x05, 0xD0, 0x7E, 0xD5, 0xB3, 0x70 };
 void os_getDevEui (u1_t* buf) { memcpy_P(buf, DEVEUI, 8);}
-
 // This key should be in big endian format (or, since it is not really a
 // number but a block of memory, endianness does not really apply). In
 // practice, a key taken from ttnctl can be copied as-is.
-static const u1_t PROGMEM APPKEY[16] = { 0xEB, 0xBF, 0xC6, 0x76, 0x84, 0xF4, 0x82, 0x5E, 0x89, 0xBB, 0xBC, 0xD7, 0x20, 0x1A, 0x8A, 0x0D };
+// The key shown here is the semtech default key.
+// 73834164AB95D8939C90D803CE4129BC
+static const u1_t PROGMEM APPKEY[16] = { 0x73, 0x83, 0x41, 0x64, 0xAB, 0x95, 0xD8, 0x93, 0x9C, 0x90, 0xD8, 0x03, 0xCE, 0x41, 0x29, 0xBC};
 void os_getDevKey (u1_t* buf) {  memcpy_P(buf, APPKEY, 16);}
+
 
 static uint8_t mydata[] = "Hello, world!";
 static osjob_t sendjob;
@@ -75,18 +61,11 @@ const unsigned TX_INTERVAL = 60;
 
 // Pin mapping
 const lmic_pinmap lmic_pins = {
-    .nss = 10,
+    .nss = 6,
     .rxtx = LMIC_UNUSED_PIN,
-    .rst = 11,
-    .dio = {6, 2, LMIC_UNUSED_PIN},
+    .rst = 5,
+    .dio = {2, 3, 4},
 };
-
-void printHex2(unsigned v) {
-    v &= 0xff;
-    if (v < 16)
-        Serial.print('0');
-    Serial.print(v, HEX);
-}
 
 void onEvent (ev_t ev) {
     Serial.print(os_getTime());
@@ -109,57 +88,28 @@ void onEvent (ev_t ev) {
             break;
         case EV_JOINED:
             Serial.println(F("EV_JOINED"));
-            {
-              u4_t netid = 0;
-              devaddr_t devaddr = 0;
-              u1_t nwkKey[16];
-              u1_t artKey[16];
-              LMIC_getSessionKeys(&netid, &devaddr, nwkKey, artKey);
-              Serial.print("netid: ");
-              Serial.println(netid, DEC);
-              Serial.print("devaddr: ");
-              Serial.println(devaddr, HEX);
-              Serial.print("AppSKey: ");
-              for (size_t i=0; i<sizeof(artKey); ++i) {
-                if (i != 0)
-                  Serial.print("-");
-                printHex2(artKey[i]);
-              }
-              Serial.println("");
-              Serial.print("NwkSKey: ");
-              for (size_t i=0; i<sizeof(nwkKey); ++i) {
-                      if (i != 0)
-                              Serial.print("-");
-                      printHex2(nwkKey[i]);
-              }
-              Serial.println();
-            }
+
             // Disable link check validation (automatically enabled
-            // during join, but because slow data rates change max TX
-	    // size, we don't use it in this example.
+            // during join, but not supported by TTN at this time).
             LMIC_setLinkCheckMode(0);
             break;
-        /*
-        || This event is defined but not used in the code. No
-        || point in wasting codespace on it.
-        ||
-        || case EV_RFU1:
-        ||     Serial.println(F("EV_RFU1"));
-        ||     break;
-        */
+        case EV_RFU1:
+            Serial.println(F("EV_RFU1"));
+            break;
         case EV_JOIN_FAILED:
             Serial.println(F("EV_JOIN_FAILED"));
             break;
         case EV_REJOIN_FAILED:
             Serial.println(F("EV_REJOIN_FAILED"));
             break;
+            break;
         case EV_TXCOMPLETE:
             Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
             if (LMIC.txrxFlags & TXRX_ACK)
               Serial.println(F("Received ack"));
             if (LMIC.dataLen) {
-              Serial.print(F("Received "));
-              Serial.print(LMIC.dataLen);
+              Serial.println(F("Received "));
+              Serial.println(LMIC.dataLen);
               Serial.println(F(" bytes of payload"));
             }
             // Schedule next transmission
@@ -181,30 +131,9 @@ void onEvent (ev_t ev) {
         case EV_LINK_ALIVE:
             Serial.println(F("EV_LINK_ALIVE"));
             break;
-        /*
-        || This event is defined but not used in the code. No
-        || point in wasting codespace on it.
-        ||
-        || case EV_SCAN_FOUND:
-        ||    Serial.println(F("EV_SCAN_FOUND"));
-        ||    break;
-        */
-        case EV_TXSTART:
-            Serial.println(F("EV_TXSTART"));
-            break;
-        case EV_TXCANCELED:
-            Serial.println(F("EV_TXCANCELED"));
-            break;
-        case EV_RXSTART:
-            /* do not print anything -- it wrecks timing */
-            break;
-        case EV_JOIN_TXCOMPLETE:
-            Serial.println(F("EV_JOIN_TXCOMPLETE: no JoinAccept"));
-            break;
-
-        default:
-            Serial.print(F("Unknown event: "));
-            Serial.println((unsigned) ev);
+         default:
+            Serial.println(F("Unknown event"));
+            Serial.print(ev);
             break;
     }
 }
@@ -222,7 +151,7 @@ void do_send(osjob_t* j){
 }
 
 void setup() {
-    Serial.begin(9600);
+    Serial.begin(115200);
     Serial.println(F("Starting"));
 
     #ifdef VCC_ENABLE
