@@ -1,6 +1,6 @@
 {
-    "configuration": "cpu=atmega328old",
-    "board": "arduino:avr:nano",
-    "sketch": "ttn-otaa.ino",
-    "port": "COM4"
+    "configuration": "FlashFreq=80,UploadSpeed=921600,DebugLevel=none",
+    "board": "esp32:esp32:esp32doit-devkit-v1",
+    "sketch": "main.ino",
+    "port": "COM5"
 }
